@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Balance Disk Pro — Tilt & Stability Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom animations and utilities */
+        body {
+            background-color: #090d16;
+            color: #f8fafc;
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: contain;
+        }
+
+        /* Smooth transition for the level glow */
+        .gauge-glow-safe {
+            box-shadow: 0 0 40px -5px rgba(16, 185, 129, 0.35), inset 0 0 25px rgba(16, 185, 129, 0.15);
+            border-color: rgba(16, 185, 129, 0.6);
+        }
+
+        .gauge-glow-danger {
+            box-shadow: 0 0 45px -5px rgba(244, 63, 94, 0.45), inset 0 0 30px rgba(244, 63, 94, 0.2);
+            border-color: rgba(244, 63, 94, 0.75);
+        }
+
+        .gauge-glow-idle {
+            box-shadow: 0 0 30px -10px rgba(56, 189, 248, 0.2);
+            border-color: rgba(148, 163, 184, 0.25);
+        }
+
+        /* Custom Range Slider Styling */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-runnable-track {
+            height: 8px;
+            border-radius: 999px;
+            background: #1e293b;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            height: 22px;
+            width: 22px;
+            border-radius: 50%;
+            background: #38bdf8;
+            margin-top: -7px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+            border: 2px solid #0f172a;
+            transition: transform 0.1s ease;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:active {
+            transform: scale(1.15);
+        }
+
+        /* Prevent text selection during touch interactions on simulation pad */
+        .no-select {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between antialiased selection:bg-sky-500/30">
+
+    <!-- Top Header -->
+    <header class="w-full max-w-lg mx-auto px-4 pt-4 pb-2 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-sky-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                <svg class="w-5 h-5 text-slate-950" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="9" />
+                    <circle cx="12" cy="12" r="3" fill="currentColor" />
+                    <path stroke-linecap="round" d="M12 3v2m0 14v2M3 12h2m14 0h2" />
+                </svg>
+            </div>
+            <div>
+                <h1 class="text-base font-bold tracking-tight text-white leading-tight">Balance Disk Pro</h1>
+                <p id="sensorStatusBadge" class="text-[11px] font-medium text-slate-400 flex items-center gap-1.5">
+                    <span id="sensorDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    <span id="sensorStatusText">Waiting for sensor...</span>
+                </p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <!-- Audio Feedback Toggle -->
+            <button id="audioToggleBtn" title="Toggle Audio Alerts" class="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 text-slate-300 transition active:scale-95">
+                <svg id="audioIconOn" class="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                </svg>
+                <svg id="audioIconOff" class="w-5 h-5 text-slate-500 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                </svg>
+            </button>
+
+            <!-- Simulation Mode Toggle -->
+            <button id="simToggleBtn" class="px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/60 text-xs font-semibold text-slate-300 transition active:scale-95">
+                Sim: OFF
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="w-full max-w-lg mx-auto px-4 py-2 flex-1 flex flex-col gap-4">
+
+        <!-- Custom Toast Notification Banner (No alert() used) -->
+        <div id="toastBanner" class="hidden rounded-xl px-3.5 py-2.5 text-xs font-medium bg-sky-500/15 border border-sky-500/30 text-sky-200 flex items-center justify-between transition-all">
+            <span id="toastMessage">Calibrated flat position.</span>
+            <button onclick="hideToast()" class="text-sky-400 hover:text-white ml-2 font-bold">✕</button>
+        </div>
+
+        <!-- Primary Timer Card (High Contrast for Floor Viewing) -->
+        <section id="timerCard" class="rounded-3xl bg-slate-900/90 border border-slate-800 p-4 shadow-xl transition-colors duration-200">
+            <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Balanced Time</span>
+                <span id="statusPill" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide bg-slate-800 text-slate-400">
+                    Ready
+                </span>
+            </div>
+
+            <!-- Giant Balanced Time Readout -->
+            <div class="flex items-baseline justify-center my-1">
+                <div id="balancedTimeDisplay" class="font-mono text-5xl sm:text-6xl font-extrabold tracking-tight text-white tabular-nums">
+                    00:00<span class="text-2xl sm:text-3xl text-slate-400">.00</span>
+                </div>
+            </div>
+
+            <!-- Secondary Session Stats -->
+            <div class="grid grid-cols-3 gap-2 pt-3 mt-2 border-t border-slate-800/80 text-center">
+                <div>
+                    <div class="text-[11px] font-medium text-slate-400">Session Time</div>
+                    <div id="totalTimeDisplay" class="font-mono text-sm font-bold text-slate-200 tabular-nums mt-0.5">00:00.0</div>
+                </div>
+                <div class="border-x border-slate-800/80">
+                    <div class="text-[11px] font-medium text-slate-400">Stability</div>
+                    <div id="stabilityPercentDisplay" class="font-mono text-sm font-bold text-emerald-400 tabular-nums mt-0.5">100%</div>
+                </div>
+                <div>
+                    <div class="text-[11px] font-medium text-slate-400">Best Streak</div>
+                    <div id="streakDisplay" class="font-mono text-sm font-bold text-sky-400 tabular-nums mt-0.5">0.0s</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Visual Spirit Level / Bubble Gauge Section -->
+        <section class="flex flex-col items-center justify-center my-1">
+            <div id="gaugeWrapper" class="relative w-64 h-64 sm:w-72 sm:h-72 rounded-full bg-slate-900/95 border-2 gauge-glow-idle flex items-center justify-center transition-all duration-150 no-select">
+                
+                <!-- Responsive SVG Bullseye & Degree Rings -->
+                <svg id="levelSvg" viewBox="0 0 240 240" class="w-full h-full overflow-visible">
+                    <!-- Outer Max Ring (25 degrees) -->
+                    <circle cx="120" cy="120" r="110" fill="none" stroke="#1e293b" stroke-width="1.5" />
+                    
+                    <!-- 15 Degree Ring -->
+                    <circle cx="120" cy="120" r="66" fill="none" stroke="#1e293b" stroke-width="1" stroke-dasharray="3 3" />
+                    
+                    <!-- 10 Degree Ring -->
+                    <circle cx="120" cy="120" r="44" fill="none" stroke="#1e293b" stroke-width="1" stroke-dasharray="2 2" />
+
+                    <!-- Dynamic Threshold Target Zone Ring (Updates with slider) -->
+                    <circle id="thresholdRing" cx="120" cy="120" r="35.2" fill="rgba(16, 185, 129, 0.12)" stroke="#10b981" stroke-width="2" />
+
+                    <!-- Crosshairs -->
+                    <line x1="120" y1="6" x2="120" y2="234" stroke="#334155" stroke-width="1" />
+                    <line x1="6" y1="120" x2="234" y2="120" stroke="#334155" stroke-width="1" />
+
+                    <!-- Degree Ring Labels -->
+                    <text x="123" y="52" fill="#475569" font-size="8" font-family="JetBrains Mono">15°</text>
+                    <text x="123" y="14" fill="#475569" font-size="8" font-family="JetBrains Mono">25°</text>
+
+                    <!-- Center Pin -->
+                    <circle cx="120" cy="120" r="3" fill="#64748b" />
+
+                    <!-- Vector Line from Center to Bubble -->
+                    <line id="tiltVectorLine" x1="120" y1="120" x2="120" y2="120" stroke="rgba(56, 189, 248, 0.4)" stroke-width="2" stroke-linecap="round" />
+
+                    <!-- Live Moving Bubble Indicator -->
+                    <g id="bubbleGroup" transform="translate(120, 120)">
+                        <!-- Outer Bubble Halo -->
+                        <circle id="bubbleHalo" cx="0" cy="0" r="16" fill="rgba(16, 185, 129, 0.25)" />
+                        <!-- Main Bubble Core -->
+                        <circle id="bubbleCore" cx="0" cy="0" r="10" fill="#10b981" stroke="#ffffff" stroke-width="2" />
+                        <!-- Specular Highlight -->
+                        <circle cx="-3" cy="-3" r="2.5" fill="rgba(255, 255, 255, 0.7)" />
+                    </g>
+                </svg>
+
+                <!-- Floating Live Tilt Badge at Bottom of Gauge -->
+                <div class="absolute -bottom-3 px-3.5 py-1 rounded-full bg-slate-800 border border-slate-700 shadow-lg flex items-center gap-2">
+                    <span class="text-[11px] font-semibold text-slate-400 uppercase">Tilt</span>
+                    <span id="totalTiltReadout" class="font-mono text-sm font-extrabold text-white tabular-nums">0.0°</span>
+                </div>
+            </div>
+
+            <!-- Pitch & Roll Numeric Pill Row -->
+            <div class="grid grid-cols-2 gap-3 w-full mt-6">
+                <div class="rounded-2xl bg-slate-900/80 border border-slate-800/90 px-4 py-2.5 flex items-center justify-between">
+                    <span class="text-xs font-medium text-slate-400">Pitch (Front/Back)</span>
+                    <span id="pitchReadout" class="font-mono text-sm font-bold text-slate-100 tabular-nums">0.0°</span>
+                </div>
+                <div class="rounded-2xl bg-slate-900/80 border border-slate-800/90 px-4 py-2.5 flex items-center justify-between">
+                    <span class="text-xs font-medium text-slate-400">Roll (Left/Right)</span>
+                    <span id="rollReadout" class="font-mono text-sm font-bold text-slate-100 tabular-nums">0.0°</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Primary Action Controls -->
+        <section class="grid grid-cols-12 gap-2.5">
+            <!-- Start / Stop Session Button -->
+            <button id="startStopBtn" class="col-span-6 py-3.5 px-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-sm tracking-wide shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition active:scale-95">
+                <svg id="playIcon" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                </svg>
+                <svg id="pauseIcon" class="w-5 h-5 hidden" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                </svg>
+                <span id="startStopText">Start Session</span>
+            </button>
+
+            <!-- Zero / Calibrate Button -->
+            <button id="calibrateBtn" class="col-span-4 py-3.5 px-3 rounded-2xl bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/40 text-sky-300 font-bold text-xs sm:text-sm flex items-center justify-center gap-1.5 transition active:scale-95">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v3m0 12v3M3 12h3m12 0h3m-9-4a4 4 0 100 8 4 4 0 000-8z" />
+                </svg>
+                <span>Zero / Cal</span>
+            </button>
+
+            <!-- Reset Button -->
+            <button id="resetBtn" class="col-span-2 py-3.5 px-2 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-bold text-xs flex items-center justify-center transition active:scale-95" title="Reset Session">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+            </button>
+        </section>
+
+        <!-- Threshold Configuration Card -->
+        <section class="rounded-2xl bg-slate-900/80 border border-slate-800 p-4">
+            <div class="flex items-center justify-between mb-2">
+                <label for="thresholdSlider" class="text-xs font-semibold text-slate-300">
+                    Max Allowed Tilt Threshold
+                </label>
+                <span id="thresholdValueLabel" class="font-mono text-sm font-extrabold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 rounded-lg">
+                    8°
+                </span>
+            </div>
+            <input id="thresholdSlider" type="range" min="2" max="20" step="1" value="8" class="w-full" />
+            <div class="flex justify-between text-[10px] font-mono text-slate-500 mt-1">
+                <span>2° (Pro)</span>
+                <span>8° (Default)</span>
+                <span>15° (Beginner)</span>
+                <span>20°</span>
+            </div>
+        </section>
+
+        <!-- Desktop / Fallback Interactive Simulation Pad (Shown when Sim is active) -->
+        <section id="simPanel" class="hidden rounded-2xl bg-indigo-950/40 border border-indigo-500/40 p-4">
+            <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-indigo-300">Desktop Tilt Simulator</h2>
+                </div>
+                <button id="simCenterBtn" class="text-[11px] font-semibold px-2.5 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+                    Level Flat (0°)
+                </button>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">Drag inside the pad or use sliders below to simulate tilting the phone on a balance disk.</p>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                <!-- Interactive 2D Touch/Mouse Tilt Pad -->
+                <div id="simPad" class="relative w-full h-36 rounded-xl bg-slate-950 border border-indigo-500/30 flex items-center justify-center cursor-crosshair no-select overflow-hidden">
+                    <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div class="w-full h-[1px] bg-slate-800"></div>
+                    </div>
+                    <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div class="h-full w-[1px] bg-slate-800"></div>
+                    </div>
+                    <div id="simPuck" class="w-6 h-6 rounded-full bg-indigo-400 border-2 border-white shadow-lg pointer-events-none transform -translate-x-0 -translate-y-0"></div>
+                    <span class="absolute bottom-1.5 right-2 text-[10px] font-mono text-slate-500 pointer-events-none">Drag Pad</span>
+                </div>
+
+                <!-- Fine Sliders for Pitch & Roll -->
+                <div class="flex flex-col gap-3">
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">Sim Pitch (Beta)</span>
+                            <span id="simPitchVal" class="font-mono text-indigo-300 font-bold">0°</span>
+                        </div>
+                        <input id="simPitchSlider" type="range" min="-25" max="25" step="0.5" value="0" class="w-full" />
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">Sim Roll (Gamma)</span>
+                            <span id="simRollVal" class="font-mono text-indigo-300 font-bold">0°</span>
+                        </div>
+                        <input id="simRollSlider" type="range" min="-25" max="25" step="0.5" value="0" class="w-full" />
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Session History List -->
+        <section class="rounded-2xl bg-slate-900/70 border border-slate-800/90 p-4 mb-4">
+            <div class="flex items-center justify-between mb-2.5">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Session Runs</h3>
+                <button id="clearHistoryBtn" class="text-[11px] text-slate-500 hover:text-slate-300 hidden">Clear</button>
+            </div>
+            <div id="historyList" class="flex flex-col gap-2 text-xs">
+                <div class="text-slate-500 text-center py-3 italic">
+                    Complete a balance run to record your time here.
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        /**
+         * Balance Disk Pro — Core Application Logic
+         * Handles DeviceOrientation API (including iOS 13+ permission), calibration offsets,
+         * high-precision balance timer, Web Audio API feedback, and desktop fallback simulation.
+         */
+
+        // --- Application State ---
+        const state = {
+            // Raw sensor values (degrees)
+            rawBeta: 0,
+            rawGamma: 0,
+            // Calibration zero offsets (degrees)
+            offsetBeta: 0,
+            offsetGamma: 0,
+            // Calibrated relative angles (degrees)
+            pitch: 0,
+            roll: 0,
+            totalTilt: 0,
+            // Threshold configuration
+            maxThreshold: 8, // degrees
+            // Session timing state
+            isRunning: false,
+            lastFrameTime: null,
+            balancedMs: 0,
+            totalSessionMs: 0,
+            currentStreakMs: 0,
+            bestStreakMs: 0,
+            isCurrentlyBalanced: true,
+            // Sensor & Simulation flags
+            sensorActive: false,
+            sensorDataReceived: false,
+            simMode: false,
+            // Audio feedback
+            audioEnabled: true,
+            audioCtx: null,
+            lastAlertTime: 0,
+            // History array
+            runs: []
+        };
+
+        // --- DOM Elements ---
+        const el = {
+            sensorDot: document.getElementById('sensorDot'),
+            sensorStatusText: document.getElementById('sensorStatusText'),
+            audioToggleBtn: document.getElementById('audioToggleBtn'),
+            audioIconOn: document.getElementById('audioIconOn'),
+            audioIconOff: document.getElementById('audioIconOff'),
+            simToggleBtn: document.getElementById('simToggleBtn'),
+            toastBanner: document.getElementById('toastBanner'),
+            toastMessage: document.getElementById('toastMessage'),
+            timerCard: document.getElementById('timerCard'),
+            statusPill: document.getElementById('statusPill'),
+            balancedTimeDisplay: document.getElementById('balancedTimeDisplay'),
+            totalTimeDisplay: document.getElementById('totalTimeDisplay'),
+            stabilityPercentDisplay: document.getElementById('stabilityPercentDisplay'),
+            streakDisplay: document.getElementById('streakDisplay'),
+            gaugeWrapper: document.getElementById('gaugeWrapper'),
+            thresholdRing: document.getElementById('thresholdRing'),
+            tiltVectorLine: document.getElementById('tiltVectorLine'),
+            bubbleGroup: document.getElementById('bubbleGroup'),
+            bubbleHalo: document.getElementById('bubbleHalo'),
+            bubbleCore: document.getElementById('bubbleCore'),
+            totalTiltReadout: document.getElementById('totalTiltReadout'),
+            pitchReadout: document.getElementById('pitchReadout'),
+            rollReadout: document.getElementById('rollReadout'),
+            startStopBtn: document.getElementById('startStopBtn'),
+            playIcon: document.getElementById('playIcon'),
+            pauseIcon: document.getElementById('pauseIcon'),
+            startStopText: document.getElementById('startStopText'),
+            calibrateBtn: document.getElementById('calibrateBtn'),
+            resetBtn: document.getElementById('resetBtn'),
+            thresholdSlider: document.getElementById('thresholdSlider'),
+            thresholdValueLabel: document.getElementById('thresholdValueLabel'),
+            simPanel: document.getElementById('simPanel'),
+            simCenterBtn: document.getElementById('simCenterBtn'),
+            simPad: document.getElementById('simPad'),
+            simPuck: document.getElementById('simPuck'),
+            simPitchSlider: document.getElementById('simPitchSlider'),
+            simRollSlider: document.getElementById('simRollSlider'),
+            simPitchVal: document.getElementById('simPitchVal'),
+            simRollVal: document.getElementById('simRollVal'),
+            historyList: document.getElementById('historyList'),
+            clearHistoryBtn: document.getElementById('clearHistoryBtn')
+        };
+
+        // --- Constants for SVG Gauge ---
+        const MAX_GAUGE_DEGREES = 25; // Outer edge of bullseye represents 25 degrees
+        const MAX_GAUGE_RADIUS = 110; // SVG units (center is 120,120)
+
+        // --- Toast Helper ---
+        let toastTimeout = null;
+        function showToast(msg) {
+            el.toastMessage.textContent = msg;
+            el.toastBanner.classList.remove('hidden');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                el.toastBanner.classList.add('hidden');
+            }, 3200);
+        }
+
+        function hideToast() {
+            el.toastBanner.classList.add('hidden');
+        }
+
+        // --- Web Audio API Synthesizer (No External Sound Files Needed) ---
+        function initAudio() {
+            if (!state.audioCtx) {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (AudioContextClass) {
+                    state.audioCtx = new AudioContextClass();
+                }
+            }
+            if (state.audioCtx && state.audioCtx.state === 'suspended') {
+                state.audioCtx.resume();
+            }
+        }
+
+        function playTone(type) {
+            if (!state.audioEnabled) return;
+            initAudio();
+            if (!state.audioCtx) return;
+
+            const now = state.audioCtx.currentTime;
+            // Throttle alert sounds so they don't spam rapidly on threshold edge
+            if (type === 'slip' && now - state.lastAlertTime < 0.45) return;
+            if (type === 'recover' && now - state.lastAlertTime < 0.35) return;
+            state.lastAlertTime = now;
+
+            try {
+                const osc = state.audioCtx.createOscillator();
+                const gain = state.audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(state.audioCtx.destination);
+
+                if (type === 'slip') {
+                    // Low warning double-tone
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(240, now);
+                    osc.frequency.exponentialRampToValueAtTime(160, now + 0.18);
+                    gain.gain.setValueAtTime(0.18, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                    osc.start(now);
+                    osc.stop(now + 0.21);
+                } else if (type === 'recover') {
+                    // Subtle pleasant high chime when returning to balance
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(587.33, now); // D5
+                    osc.frequency.exponentialRampToValueAtTime(880, now + 0.14); // A5
+                    gain.gain.setValueAtTime(0.12, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
+                    osc.start(now);
+                    osc.stop(now + 0.17);
+                } else if (type === 'calibrate') {
+                    // Crisp confirmation blip
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(660, now);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                }
+            } catch (err) {
+                console.warn('Audio playback skipped:', err);
+            }
+        }
+
+        // --- Sensor & Permission Handling ---
+        async function requestSensorAccess() {
+            initAudio();
+
+            // Check if iOS 13+ permission API exists
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const permissionState = await DeviceOrientationEvent.requestPermission();
+                    if (permissionState === 'granted') {
+                        attachOrientationListener();
+                        return true;
+                    } else {
+                        showToast('Motion sensor permission denied. Enabling Simulation Mode.');
+                        enableSimMode(true);
+                        return false;
+                    }
+                } catch (error) {
+                    console.error('Sensor permission error:', error);
+                    showToast('Could not access sensors. Enabling Simulation Mode.');
+                    enableSimMode(true);
+                    return false;
+                }
+            } else if ('DeviceOrientationEvent' in window) {
+                // Non-iOS or older browsers that don't require explicit requestPermission()
+                attachOrientationListener();
+                return true;
+            } else {
+                showToast('DeviceOrientation not supported. Simulation Mode active.');
+                enableSimMode(true);
+                return false;
+            }
+        }
+
+        function attachOrientationListener() {
+            if (state.sensorActive) return;
+            window.addEventListener('deviceorientation', handleDeviceOrientation, true);
+            state.sensorActive = true;
+
+            // Fallback check: If no real sensor events arrive within 1.2s (e.g., desktop PC), auto-enable Sim Mode
+            setTimeout(() => {
+                if (!state.sensorDataReceived && !state.simMode) {
+                    updateSensorStatus('No Gyroscope Detected', 'amber');
+                    enableSimMode(true);
+                    showToast('Desktop/No-Gyro detected: Tilt Simulator enabled.');
+                }
+            }, 1200);
+        }
+
+        function handleDeviceOrientation(event) {
+            // Some desktop browsers fire one event with null beta/gamma
+            if (event.beta === null || event.gamma === null) {
+                return;
+            }
+
+            if (!state.sensorDataReceived) {
+                state.sensorDataReceived = true;
+                updateSensorStatus('Live Gyroscope Active', 'emerald');
+                // Automatically turn off sim mode if real sensor wakes up
+                if (state.simMode) {
+                    enableSimMode(false);
+                }
+            }
+
+            if (!state.simMode) {
+                state.rawBeta = event.beta;
+                state.rawGamma = event.gamma;
+                computeTiltAndRender();
+            }
+        }
+
+        function updateSensorStatus(text, color) {
+            el.sensorStatusText.textContent = text;
+            el.sensorDot.className = `w-2 h-2 rounded-full bg-${color}-400`;
+            if (color === 'emerald') {
+                el.sensorDot.classList.add('animate-pulse');
+            }
+        }
+
+        // --- Calibration Logic ---
+        function calibrateZero() {
+            state.offsetBeta = state.rawBeta;
+            state.offsetGamma = state.rawGamma;
+            computeTiltAndRender();
+            playTone('calibrate');
+            showToast('Calibrated! Current angle set to 0.0°.');
+        }
+
+        // --- Core Tilt Calculation & Visual Spirit Level Update ---
+        function computeTiltAndRender() {
+            // Relative pitch & roll clamped to realistic flat balance disk range (-90 to 90)
+            let pitch = state.rawBeta - state.offsetBeta;
+            let roll = state.rawGamma - state.offsetGamma;
+
+            // Handle wrap-around edge cases cleanly
+            if (pitch > 180) pitch -= 360;
+            if (pitch < -180) pitch += 360;
+            if (roll > 180) roll -= 360;
+            if (roll < -180) roll += 360;
+
+            state.pitch = pitch;
+            state.roll = roll;
+
+            // Euclidean 2D tilt magnitude (accurate for small-to-moderate angles on a balance board)
+            const totalTilt = Math.hypot(pitch, roll);
+            state.totalTilt = totalTilt;
+
+            const withinThreshold = totalTilt <= state.maxThreshold;
+
+            // Trigger audio alerts when crossing threshold boundary during an active session
+            if (state.isRunning && withinThreshold !== state.isCurrentlyBalanced) {
+                if (!withinThreshold) {
+                    playTone('slip');
+                } else {
+                    playTone('recover');
+                }
+            }
+            state.isCurrentlyBalanced = withinThreshold;
+
+            // Update Numeric Readouts
+            el.totalTiltReadout.textContent = `${totalTilt.toFixed(1)}°`;
+            el.pitchReadout.textContent = `${pitch >= 0 ? '+' : ''}${pitch.toFixed(1)}°`;
+            el.rollReadout.textContent = `${roll >= 0 ? '+' : ''}${roll.toFixed(1)}°`;
+
+            // Map Tilt to SVG Coordinates (Center = 120, 120)
+            // Roll (Gamma) maps to X axis; Pitch (Beta) maps to Y axis
+            const clampedTilt = Math.min(totalTilt, MAX_GAUGE_DEGREES);
+            const scale = totalTilt > 0 ? (clampedTilt / MAX_GAUGE_DEGREES) * MAX_GAUGE_RADIUS : 0;
+            const angleRad = Math.atan2(pitch, roll);
+
+            const bubbleX = totalTilt > 0 ? Math.cos(angleRad) * scale : 0;
+            const bubbleY = totalTilt > 0 ? Math.sin(angleRad) * scale : 0;
+
+            // Move Bubble & Vector Line
+            el.bubbleGroup.setAttribute('transform', `translate(${(120 + bubbleX).toFixed(2)}, ${(120 + bubbleY).toFixed(2)})`);
+            el.tiltVectorLine.setAttribute('x2', (120 + bubbleX).toFixed(2));
+            el.tiltVectorLine.setAttribute('y2', (120 + bubbleY).toFixed(2));
+
+            // Visual Theme State (Green = Balanced, Red = Exceeded Threshold)
+            if (withinThreshold) {
+                el.bubbleCore.setAttribute('fill', '#10b981');
+                el.bubbleHalo.setAttribute('fill', 'rgba(16, 185, 129, 0.28)');
+                el.tiltVectorLine.setAttribute('stroke', 'rgba(16, 185, 129, 0.45)');
+                el.thresholdRing.setAttribute('stroke', '#10b981');
+                el.thresholdRing.setAttribute('fill', 'rgba(16, 185, 129, 0.12)');
+                el.totalTiltReadout.className = 'font-mono text-sm font-extrabold text-emerald-400 tabular-nums';
+
+                if (state.isRunning) {
+                    el.gaugeWrapper.classList.remove('gauge-glow-idle', 'gauge-glow-danger');
+                    el.gaugeWrapper.classList.add('gauge-glow-safe');
+                    el.statusPill.textContent = 'Balanced';
+                    el.statusPill.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+                    el.timerCard.classList.remove('border-rose-500/50');
+                    el.timerCard.classList.add('border-emerald-500/40');
+                }
+            } else {
+                el.bubbleCore.setAttribute('fill', '#f43f5e');
+                el.bubbleHalo.setAttribute('fill', 'rgba(244, 63, 94, 0.32)');
+                el.tiltVectorLine.setAttribute('stroke', 'rgba(244, 63, 94, 0.5)');
+                el.thresholdRing.setAttribute('stroke', '#f43f5e');
+                el.thresholdRing.setAttribute('fill', 'rgba(244, 63, 94, 0.12)');
+                el.totalTiltReadout.className = 'font-mono text-sm font-extrabold text-rose-400 tabular-nums';
+
+                if (state.isRunning) {
+                    el.gaugeWrapper.classList.remove('gauge-glow-idle', 'gauge-glow-safe');
+                    el.gaugeWrapper.classList.add('gauge-glow-danger');
+                    el.statusPill.textContent = 'Off Balance!';
+                    el.statusPill.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide bg-rose-500/20 text-rose-300 border border-rose-500/30 animate-pulse';
+                    el.timerCard.classList.remove('border-emerald-500/40');
+                    el.timerCard.classList.add('border-rose-500/50');
+                }
+            }
+
+            if (!state.isRunning) {
+                el.gaugeWrapper.classList.remove('gauge-glow-safe', 'gauge-glow-danger');
+                el.gaugeWrapper.classList.add('gauge-glow-idle');
+                el.timerCard.classList.remove('border-emerald-500/40', 'border-rose-500/50');
+            }
+        }
+
+        // --- Threshold Ring Sizing ---
+        function updateThresholdVisuals(deg) {
+            state.maxThreshold = deg;
+            el.thresholdValueLabel.textContent = `${deg}°`;
+            const radius = (deg / MAX_GAUGE_DEGREES) * MAX_GAUGE_RADIUS;
+            el.thresholdRing.setAttribute('r', radius.toFixed(2));
+            computeTiltAndRender();
+        }
+
+        // --- High-Precision Animation & Timer Loop ---
+        function timerLoop(timestamp) {
+            if (state.isRunning) {
+                if (state.lastFrameTime !== null) {
+                    const deltaMs = timestamp - state.lastFrameTime;
+                    state.totalSessionMs += deltaMs;
+
+                    if (state.isCurrentlyBalanced) {
+                        state.balancedMs += deltaMs;
+                        state.currentStreakMs += deltaMs;
+                        if (state.currentStreakMs > state.bestStreakMs) {
+                            state.bestStreakMs = state.currentStreakMs;
+                        }
+                    } else {
+                        state.currentStreakMs = 0;
+                    }
+
+                    updateTimerUI();
+                }
+                state.lastFrameTime = timestamp;
+            }
+            requestAnimationFrame(timerLoop);
+        }
+
+        function formatMMSSms(ms) {
+            const totalSeconds = Math.floor(ms / 1000);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            const centiseconds = Math.floor((ms % 1000) / 10);
+
+            const mm = String(minutes).padStart(2, '0');
+            const ss = String(seconds).padStart(2, '0');
+            const cs = String(centiseconds).padStart(2, '0');
+            return { main: `${mm}:${ss}`, frac: `.${cs}` };
+        }
+
+        function formatShortTime(ms) {
+            const totalSeconds = Math.floor(ms / 1000);
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            const tenths = Math.floor((ms % 1000) / 100);
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${tenths}`;
+        }
+
+        function updateTimerUI() {
+            const formatted = formatMMSSms(state.balancedMs);
+            el.balancedTimeDisplay.innerHTML = `${formatted.main}<span class="text-2xl sm:text-3xl text-slate-400">${formatted.frac}</span>`;
+            el.totalTimeDisplay.textContent = formatShortTime(state.totalSessionMs);
+
+            const stabilityPct = state.totalSessionMs > 0
+                ? Math.round((state.balancedMs / state.totalSessionMs) * 100)
+                : 100;
+            el.stabilityPercentDisplay.textContent = `${stabilityPct}%`;
+            el.streakDisplay.textContent = `${(state.bestStreakMs / 1000).toFixed(1)}s`;
+        }
+
+        // --- Session Controls (Start, Pause, Reset, Record) ---
+        async function toggleSession() {
+            if (!state.isRunning) {
+                // Ensure sensors are initialized on user gesture
+                if (!state.sensorActive && !state.simMode) {
+                    await requestSensorAccess();
+                }
+                initAudio();
+                state.isRunning = true;
+                state.lastFrameTime = performance.now();
+
+                // Update Button Appearance to Pause
+                el.startStopBtn.classList.remove('bg-emerald-500', 'hover:bg-emerald-400', 'shadow-emerald-500/20');
+                el.startStopBtn.classList.add('bg-amber-500', 'hover:bg-amber-400', 'shadow-amber-500/20');
+                el.playIcon.classList.add('hidden');
+                el.pauseIcon.classList.remove('hidden');
+                el.startStopText.textContent = 'Pause';
+
+                computeTiltAndRender();
+            } else {
+                // Pause Session
+                state.isRunning = false;
+                state.lastFrameTime = null;
+
+                el.startStopBtn.classList.remove('bg-amber-500', 'hover:bg-amber-400', 'shadow-amber-500/20');
+                el.startStopBtn.classList.add('bg-emerald-500', 'hover:bg-emerald-400', 'shadow-emerald-500/20');
+                el.pauseIcon.classList.add('hidden');
+                el.playIcon.classList.remove('hidden');
+                el.startStopText.textContent = 'Resume';
+
+                el.statusPill.textContent = 'Paused';
+                el.statusPill.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide bg-amber-500/20 text-amber-300';
+                computeTiltAndRender();
+            }
+        }
+
+        function resetSession() {
+            // Save run to history if meaningful (> 1 second of session time)
+            if (state.totalSessionMs >= 1000) {
+                recordRunToHistory();
+            }
+
+            state.isRunning = false;
+            state.lastFrameTime = null;
+            state.balancedMs = 0;
+            state.totalSessionMs = 0;
+            state.currentStreakMs = 0;
+            state.bestStreakMs = 0;
+
+            el.startStopBtn.classList.remove('bg-amber-500', 'hover:bg-amber-400', 'shadow-amber-500/20');
+            el.startStopBtn.classList.add('bg-emerald-500', 'hover:bg-emerald-400', 'shadow-emerald-500/20');
+            el.pauseIcon.classList.add('hidden');
+            el.playIcon.classList.remove('hidden');
+            el.startStopText.textContent = 'Start Session';
+
+            el.statusPill.textContent = 'Ready';
+            el.statusPill.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wide bg-slate-800 text-slate-400';
+
+            updateTimerUI();
+            computeTiltAndRender();
+        }
+
+        function recordRunToHistory() {
+            const stabilityPct = state.totalSessionMs > 0
+                ? Math.round((state.balancedMs / state.totalSessionMs) * 100)
+                : 100;
+            const formatted = formatMMSSms(state.balancedMs);
+
+            const runEntry = {
+                id: Date.now(),
+                balancedText: `${formatted.main}${formatted.frac}`,
+                balancedMs: state.balancedMs,
+                totalText: formatShortTime(state.totalSessionMs),
+                stability: stabilityPct,
+                threshold: state.maxThreshold,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            };
+
+            state.runs.unshift(runEntry);
+            if (state.runs.length > 8) state.runs.pop();
+            renderHistory();
+        }
+
+        function renderHistory() {
+            if (state.runs.length === 0) {
+                el.clearHistoryBtn.classList.add('hidden');
+                el.historyList.innerHTML = `
+                    <div class="text-slate-500 text-center py-3 italic">
+                        Complete a balance run to record your time here.
+                    </div>
+                `;
+                return;
+            }
+
+            el.clearHistoryBtn.classList.remove('hidden');
+            const bestMs = Math.max(...state.runs.map(r => r.balancedMs));
+
+            el.historyList.innerHTML = state.runs.map((run) => {
+                const isBest = run.balancedMs === bestMs && run.balancedMs > 0;
+                return `
+                    <div class="flex items-center justify-between px-3 py-2.5 rounded-xl bg-slate-950/80 border ${isBest ? 'border-emerald-500/40' : 'border-slate-800/80'}">
+                        <div class="flex items-center gap-2.5">
+                            <span class="font-mono text-sm font-extrabold ${isBest ? 'text-emerald-400' : 'text-white'}">${run.balancedText}</span>
+                            ${isBest ? '<span class="px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-emerald-500/20 text-emerald-300">Best</span>' : ''}
+                        </div>
+                        <div class="flex items-center gap-3 text-[11px] font-mono text-slate-400">
+                            <span>${run.stability}% stable</span>
+                            <span class="text-slate-600">|</span>
+                            <span>≤${run.threshold}°</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // --- Desktop / Fallback Simulation Mode ---
+        function enableSimMode(active) {
+            state.simMode = active;
+            if (active) {
+                el.simPanel.classList.remove('hidden');
+                el.simToggleBtn.textContent = 'Sim: ON';
+                el.simToggleBtn.classList.remove('bg-slate-800/80', 'text-slate-300', 'border-slate-700/60');
+                el.simToggleBtn.classList.add('bg-indigo-600', 'text-white', 'border-indigo-400');
+                updateSensorStatus('Simulation Mode', 'indigo');
+                setSimulatedTilt(parseFloat(el.simPitchSlider.value), parseFloat(el.simRollSlider.value));
+            } else {
+                el.simPanel.classList.add('hidden');
+                el.simToggleBtn.textContent = 'Sim: OFF';
+                el.simToggleBtn.classList.add('bg-slate-800/80', 'text-slate-300', 'border-slate-700/60');
+                el.simToggleBtn.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-400');
+                if (state.sensorDataReceived) {
+                    updateSensorStatus('Live Gyroscope Active', 'emerald');
+                }
+            }
+        }
+
+        function setSimulatedTilt(pitch, roll) {
+            // Clamp to [-25, 25]
+            pitch = Math.max(-25, Math.min(25, pitch));
+            roll = Math.max(-25, Math.min(25, roll));
+
+            el.simPitchSlider.value = pitch;
+            el.simRollSlider.value = roll;
+            el.simPitchVal.textContent = `${pitch.toFixed(1)}°`;
+            el.simRollVal.textContent = `${roll.toFixed(1)}°`;
+
+            // Update Sim Pad Puck visual position
+            const rect = el.simPad.getBoundingClientRect();
+            const maxOffsetX = (rect.width / 2) - 14;
+            const maxOffsetY = (rect.height / 2) - 14;
+            const px = (roll / 25) * maxOffsetX;
+            const py = (pitch / 25) * maxOffsetY;
+            el.simPuck.style.transform = `translate(${px}px, ${py}px)`;
+
+            if (state.simMode) {
+                state.rawBeta = pitch;
+                state.rawGamma = roll;
+                computeTiltAndRender();
+            }
+        }
+
+        // Interactive Dragging on Sim Pad (Mouse & Touch)
+        let isDraggingSimPad = false;
+        function handleSimPadMove(clientX, clientY) {
+            const rect = el.simPad.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const normX = Math.max(-1, Math.min(1, (clientX - centerX) / (rect.width / 2)));
+            const normY = Math.max(-1, Math.min(1, (clientY - centerY) / (rect.height / 2)));
+            setSimulatedTilt(normY * 25, normX * 25);
+        }
+
+        el.simPad.addEventListener('mousedown', (e) => {
+            isDraggingSimPad = true;
+            handleSimPadMove(e.clientX, e.clientY);
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (isDraggingSimPad) handleSimPadMove(e.clientX, e.clientY);
+        });
+        window.addEventListener('mouseup', () => {
+            isDraggingSimPad = false;
+        });
+
+        el.simPad.addEventListener('touchstart', (e) => {
+            isDraggingSimPad = true;
+            const t = e.touches[0];
+            handleSimPadMove(t.clientX, t.clientY);
+            e.preventDefault();
+        }, { passive: false });
+        el.simPad.addEventListener('touchmove', (e) => {
+            if (isDraggingSimPad) {
+                const t = e.touches[0];
+                handleSimPadMove(t.clientX, t.clientY);
+                e.preventDefault();
+            }
+        }, { passive: false });
+        el.simPad.addEventListener('touchend', () => {
+            isDraggingSimPad = false;
+        });
+
+        // --- Event Listeners ---
+        el.startStopBtn.addEventListener('click', toggleSession);
+
+        el.calibrateBtn.addEventListener('click', async () => {
+            if (!state.sensorActive && !state.simMode) {
+                await requestSensorAccess();
+            }
+            calibrateZero();
+        });
+
+        el.resetBtn.addEventListener('click', resetSession);
+
+        el.thresholdSlider.addEventListener('input', (e) => {
+            updateThresholdVisuals(parseInt(e.target.value, 10));
+        });
+
+        el.audioToggleBtn.addEventListener('click', () => {
+            state.audioEnabled = !state.audioEnabled;
+            if (state.audioEnabled) {
+                initAudio();
+                el.audioIconOn.classList.remove('hidden');
+                el.audioIconOff.classList.add('hidden');
+                showToast('Audio alerts enabled');
+            } else {
+                el.audioIconOn.classList.add('hidden');
+                el.audioIconOff.classList.remove('hidden');
+                showToast('Audio alerts muted');
+            }
+        });
+
+        el.simToggleBtn.addEventListener('click', () => {
+            enableSimMode(!state.simMode);
+        });
+
+        el.simCenterBtn.addEventListener('click', () => {
+            setSimulatedTilt(0, 0);
+        });
+
+        el.simPitchSlider.addEventListener('input', (e) => {
+            setSimulatedTilt(parseFloat(e.target.value), parseFloat(el.simRollSlider.value));
+        });
+
+        el.simRollSlider.addEventListener('input', (e) => {
+            setSimulatedTilt(parseFloat(el.simPitchSlider.value), parseFloat(e.target.value));
+        });
+
+        el.clearHistoryBtn.addEventListener('click', () => {
+            state.runs = [];
+            renderHistory();
+        });
+
+        // --- Initialization ---
+        window.addEventListener('load', () => {
+            updateThresholdVisuals(state.maxThreshold);
+            updateTimerUI();
+            requestAnimationFrame(timerLoop);
+
+            // Attempt passive listener attachment on Android/Desktop; iOS will wait for user tap on Start/Calibrate
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission !== 'function') {
+                attachOrientationListener();
+            } else {
+                updateSensorStatus('Tap Start or Calibrate', 'amber');
+            }
+        });
+    </script>
+</body>
+</html>
